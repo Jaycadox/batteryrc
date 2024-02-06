@@ -1,0 +1,19 @@
+[package]
+name = "batteryrc"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[profile.release]
+opt-level = "z"
+strip = "symbols"
+codegen-units = 1
+panic = "abort"
+lto = true
+
+
+[dependencies]
+directories = "5.0.1"
+shellwords = "1.1.0"
+systemstat = "0.2.3"
