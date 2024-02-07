@@ -129,10 +129,10 @@ fn power_status_changed(config: &Config, is_on_ac: bool) -> Result<(), Box<dyn E
         .map(|cmd| cmd.to_command())
         .collect::<Vec<_>>();
 
-    dbg!("Battery status changed. On AC = {is_on_ac}.");
-    dbg!("Running {} saved commands...", commands.len());
+    println!("Battery status changed. On AC = {is_on_ac}.");
+    println!("Running {} saved commands...", commands.len());
     for command in commands.iter_mut() {
-        dbg!("> {}", &command);
+        println!("> {:?}", &command);
         if command.status().is_err() {
             eprintln!("Command ran with a failed exit code");
         };
