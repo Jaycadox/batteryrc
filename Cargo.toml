@@ -16,5 +16,9 @@ lto = true
 [dependencies]
 anyhow = "1.0.79"
 directories = "5.0.1"
+lockfile = "0.4.0"
 shellwords = "1.1.0"
 systemstat = "0.2.3"
+tracing = "0.1.40"
+tracing-appender = "0.2.3"
+tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
