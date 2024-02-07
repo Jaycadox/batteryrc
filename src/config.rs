@@ -98,3 +98,27 @@ impl Config {
         Err(anyhow!("Unable to find config path"))
     }
 }
+
+#[test]
+fn config_parse() {
+    let config_str = "@ac\ntestcmd 1\ncmdtest 2\n@battery\nbattest 1\nbattest 2\nbattest 3";
+    let config = Config::parse_config(config_str).unwrap();
+
+    // Test number of commands on AC and battery
+    assert_eq!(config.on_ac_cmds.len(), 2);
+    assert_eq!(config.on_bat_cmds.len(), 3);
+
+    // Test AC commands
+    assert_eq!(config.on_ac_cmds[0].name, "testcmd");
+    assert_eq!(config.on_ac_cmds[0].args, vec!["1".to_string()]);
+    assert_eq!(config.on_ac_cmds[1].name, "cmdtest");
+    assert_eq!(config.on_ac_cmds[1].args, vec!["2".to_string()]);
+
+    // Test battery commands
+    assert_eq!(config.on_bat_cmds[0].name, "battest");
+    assert_eq!(config.on_bat_cmds[0].args, vec!["1".to_string()]);
+    assert_eq!(config.on_bat_cmds[1].name, "battest");
+    assert_eq!(config.on_bat_cmds[1].args, vec!["2".to_string()]);
+    assert_eq!(config.on_bat_cmds[2].name, "battest");
+    assert_eq!(config.on_bat_cmds[2].args, vec!["3".to_string()]);
+}

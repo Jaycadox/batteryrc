@@ -2,6 +2,7 @@ use anyhow::{anyhow, Result};
 use std::process::Command;
 use tracing::error;
 
+#[derive(PartialEq, Debug)]
 pub struct ShellCommand {
     pub name: String,
     pub args: Vec<String>,
@@ -39,4 +40,37 @@ impl ShellCommand {
 
         command
     }
+}
+
+#[test]
+fn shell_parse() {
+    let command = "testcmd \"first arg\" 1 second third";
+    let shell_cmd = ShellCommand::try_from(command);
+    assert_eq!(
+        shell_cmd.unwrap(),
+        ShellCommand {
+            name: "testcmd".to_string(),
+            args: vec![
+                "first arg".to_string(),
+                "1".to_string(),
+                "second".to_string(),
+                "third".to_string()
+            ]
+        }
+    );
+}
+
+#[test]
+fn shell_command_conversion() {
+    let command = "testcmd \"first arg\" 1 second third";
+    let shell_cmd = ShellCommand::try_from(command);
+    let actual_command = shell_cmd.unwrap().to_command();
+    assert_eq!(actual_command.get_program().to_str().unwrap(), "testcmd");
+    assert_eq!(
+        actual_command
+            .get_args()
+            .map(|x| x.to_str().unwrap())
+            .collect::<Vec<_>>(),
+        vec!["first arg", "1", "second", "third"]
+    );
 }
