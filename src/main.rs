@@ -1,4 +1,5 @@
-use std::{error::Error, process::Command};
+use anyhow::{anyhow, Result};
+use std::{path::PathBuf, process::Command};
 
 use directories::ProjectDirs;
 use systemstat::{Duration, Platform};
@@ -9,16 +10,16 @@ struct ShellCommand {
 }
 
 impl TryFrom<&str> for ShellCommand {
-    type Error = String;
+    type Error = anyhow::Error;
 
-    fn try_from(value: &str) -> Result<Self, Self::Error> {
+    fn try_from(value: &str) -> Result<Self> {
         let Ok(value) = shellwords::split(value) else {
             eprintln!("Unable to parse shell command");
-            return Err("Failed shell command parse".into());
+            return Err(anyhow!("Unable to parse shell command"));
         };
         let Some(name) = value.first() else {
             eprintln!("Could not find name for shell command: {value:?}");
-            return Err("Invalid shell command".into());
+            return Err(anyhow!("Invalid shell command"));
         };
         let name = name.to_string();
 
@@ -48,7 +49,7 @@ struct Config {
 }
 
 impl Config {
-    fn parse_config(config_text: &str) -> Result<Self, Box<dyn Error>> {
+    fn parse_config(config_text: &str) -> Result<Self> {
         let mut config = Self {
             on_ac_cmds: vec![],
             on_bat_cmds: vec![],
@@ -101,7 +102,15 @@ impl Config {
         Ok(config)
     }
 
-    pub fn try_new() -> Result<Config, Box<dyn Error>> {
+    pub fn try_new() -> Result<Config> {
+        if let Ok(path) = Self::get_path() {
+            let config_contents = std::fs::read_to_string(path)?;
+            return Self::parse_config(&config_contents);
+        }
+        Err(anyhow!("Unable to find config path"))
+    }
+
+    pub fn get_path() -> Result<PathBuf> {
         if let Some(dirs) = ProjectDirs::from("io.github", "Jaycadox", "batteryrc") {
             let config = dirs.config_dir();
             if !std::path::Path::exists(config) {
@@ -109,15 +118,14 @@ impl Config {
                                                   // created, the user has bigger problems.
             }
             let config = config.join(".batteryrc");
-            let config_contents = std::fs::read_to_string(config)?;
 
-            return Self::parse_config(&config_contents);
+            return Ok(config);
         }
-        Err("unable to find config path".into())
+        Err(anyhow!("Unable to find config path"))
     }
 }
 
-fn power_status_changed(config: &Config, is_on_ac: bool) -> Result<(), Box<dyn Error>> {
+fn power_status_changed(config: &Config, is_on_ac: bool) -> Result<()> {
     let commands = if is_on_ac {
         &config.on_ac_cmds
     } else {
@@ -141,7 +149,7 @@ fn power_status_changed(config: &Config, is_on_ac: bool) -> Result<(), Box<dyn E
     Ok(())
 }
 
-fn main() -> Result<(), Box<dyn Error>> {
+fn main() -> Result<()> {
     let mut args = std::env::args().skip(1);
     let first_arg = args.next();
 
@@ -149,6 +157,17 @@ fn main() -> Result<(), Box<dyn Error>> {
         match &*first_arg {
             "--help" | "-h" => {
                 println!("BatteryRC -- made by jayphen");
+                println!(
+                    "Looking for config in: {}",
+                    match Config::get_path() {
+                        Ok(path) => path
+                            .to_str()
+                            .to_owned()
+                            .unwrap_or("Unable to display path")
+                            .to_string(),
+                        Err(e) => format!("Unable to find path: {}", e),
+                    }
+                );
                 return Ok(());
             }
             _ => {}
