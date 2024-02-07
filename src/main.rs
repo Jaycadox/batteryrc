@@ -1,143 +1,14 @@
-use anyhow::{anyhow, Result};
-use std::{path::PathBuf, process::Command};
+use anyhow::Result;
+use config::Config;
 use tracing::{debug, error, info, trace};
-use tracing_subscriber::{layer::SubscriberExt, EnvFilter};
+use tracing_subscriber::layer::SubscriberExt;
 
-use directories::ProjectDirs;
 use systemstat::{Duration, Platform};
 
-struct ShellCommand {
-    name: String,
-    args: Vec<String>,
-}
+use crate::config::PathType;
 
-impl TryFrom<&str> for ShellCommand {
-    type Error = anyhow::Error;
-
-    fn try_from(value: &str) -> Result<Self> {
-        let Ok(value) = shellwords::split(value) else {
-            error!("Unable to parse shell command");
-            return Err(anyhow!("Unable to parse shell command"));
-        };
-        let Some(name) = value.first() else {
-            error!("Could not find name for shell command: {value:?}");
-            return Err(anyhow!("Invalid shell command"));
-        };
-        let name = name.to_string();
-
-        let args = value.get(1..).map(|x| x.to_vec()).unwrap_or_default();
-
-        Ok(Self { name, args })
-    }
-}
-
-impl ShellCommand {
-    fn to_command(&self) -> Command {
-        let command_name = &self.name;
-        let command_args = &self.args;
-
-        let mut command = Command::new(command_name);
-        if !command_args.is_empty() {
-            command.args(command_args);
-        }
-
-        command
-    }
-}
-
-struct Config {
-    on_ac_cmds: Vec<ShellCommand>,
-    on_bat_cmds: Vec<ShellCommand>,
-}
-
-enum PathType {
-    Config,
-    Logs,
-}
-
-impl Config {
-    fn parse_config(config_text: &str) -> Result<Self> {
-        let mut config = Self {
-            on_ac_cmds: vec![],
-            on_bat_cmds: vec![],
-        };
-
-        enum ParseMode {
-            None,
-            Battery,
-            Ac,
-        }
-
-        let mut parse_mode = ParseMode::None;
-        let lines = config_text
-            .lines()
-            .map(|l| l.trim())
-            .filter(|l| !l.is_empty())
-            .collect::<Vec<&str>>();
-
-        for line in lines {
-            match &*line.to_lowercase() {
-                "@battery" => parse_mode = ParseMode::Battery,
-                "@ac" => parse_mode = ParseMode::Ac,
-                x => match parse_mode {
-                    ParseMode::Battery => {
-                        config.on_bat_cmds.push(match ShellCommand::try_from(x) {
-                            Ok(content) => content,
-                            Err(e) => {
-                                error!("Error while parsing shell command for battery state. {e}");
-                                continue;
-                            }
-                        })
-                    }
-                    ParseMode::Ac => config.on_ac_cmds.push(match ShellCommand::try_from(x) {
-                        Ok(content) => content,
-                        Err(e) => {
-                            error!("Error while parsing shell command for AC state. {e}");
-                            continue;
-                        }
-                    }),
-                    ParseMode::None => {
-                        error!("Attempted to specify command without valid parse mode");
-                        continue;
-                    }
-                },
-            }
-        }
-
-        Ok(config)
-    }
-
-    pub fn try_new() -> Result<Config> {
-        if let Ok(path) = Self::get_path(PathType::Config) {
-            let config_contents = std::fs::read_to_string(path)?;
-            return Self::parse_config(&config_contents);
-        }
-        Err(anyhow!("Unable to find config path"))
-    }
-
-    pub fn get_path(ptype: PathType) -> Result<PathBuf> {
-        if let Some(dirs) = ProjectDirs::from("io.github", "Jaycadox", "batteryrc") {
-            let mut config = dirs.config_dir().to_path_buf();
-            if !std::path::Path::exists(&config) {
-                std::fs::create_dir_all(&config)?; // I suppose if the directory fails to be
-                                                   // created, the user has bigger problems.
-            }
-
-            match ptype {
-                PathType::Config => {
-                    config = config.join(".batteryrc");
-                }
-                PathType::Logs => {
-                    config = config.join("logs");
-                    std::fs::create_dir_all(&config)?;
-                }
-            };
-
-            return Ok(config);
-        }
-        Err(anyhow!("Unable to find config path"))
-    }
-}
+mod config;
+mod shell_command;
 
 fn power_status_changed(config: &Config, is_on_ac: bool) -> Result<()> {
     let commands = if is_on_ac {
@@ -163,7 +34,7 @@ fn power_status_changed(config: &Config, is_on_ac: bool) -> Result<()> {
     Ok(())
 }
 
-fn main() -> Result<()> {
+fn setup_tracing() -> Result<()> {
     let file_appender = Config::get_path(PathType::Logs)
         .ok()
         .map(|logs| tracing_appender::rolling::daily(logs, "batteryrc.log"));
@@ -177,6 +48,13 @@ fn main() -> Result<()> {
         .with(file_layer);
 
     tracing::subscriber::set_global_default(sub)?;
+    Ok(())
+}
+
+fn main() -> Result<()> {
+    if setup_tracing().is_err() {
+        eprintln!("Failed to start tracing logging");
+    }
 
     let mut args = std::env::args().skip(1);
     let first_arg = args.next();
