@@ -36,7 +36,7 @@ impl Config {
             .collect::<Vec<&str>>();
 
         for line in lines {
-            match &*line.to_lowercase() {
+            match line {
                 "@battery" => parse_mode = ParseMode::Battery,
                 "@ac" => parse_mode = ParseMode::Ac,
                 x => match parse_mode {
